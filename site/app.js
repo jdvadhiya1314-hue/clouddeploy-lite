@@ -99,21 +99,21 @@ with open('site/version.json', 'r+') as f:
       title: 'Post-Deployment Smoke Verification',
       desc: 'Performs automated HTTP health verification against the live S3 website endpoint. Probes return HTTP 200 and assert that version.json contains the newly deployed Git commit SHA. The pipeline fails immediately if unreachable.',
       filename: '.github/workflows/deploy.yml (Smoke Test)',
-      code: `- name: Run HTTP smoke test
+      code: `- name: Post-deployment HTTP Smoke Test
   run: |
-    TARGET_URL="\${{ vars.WEBSITE_URL }}"
-    if [ -z "$TARGET_URL" ]; then
-      TARGET_URL="http://\${{ vars.AWS_S3_BUCKET }}.s3-website-\${{ vars.AWS_REGION }}.amazonaws.com"
-    fi
+    # 1. Probe website root
+    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" --retry 5 "$TARGET_URL")
+    if [ "$HTTP_CODE" -ne 200 ]; then exit 1; fi
 
-    echo "==> Probing live website at $TARGET_URL..."
-    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" --retry 5 --retry-delay 3 "$TARGET_URL")
+    # 2. Probe version.json and verify commit SHA
+    VERSION_RESPONSE=\$(curl -s -f "$TARGET_URL/version.json")
+    DEPLOYED_SHA=\$(echo "\$VERSION_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('commitSha', ''))")
 
-    if [ "$HTTP_CODE" -ne 200 ]; then
-      echo "Smoke test failed! Expected HTTP 200, got: $HTTP_CODE" >&2
+    if [ "\$DEPLOYED_SHA" != "\${{ github.sha }}" ]; then
+      echo "Commit SHA mismatch! Expected \${{ github.sha }}, got \$DEPLOYED_SHA" >&2
       exit 1
     fi
-    echo "Smoke test passed with status 200 OK!"`
+    echo "Smoke test passed with status 200 OK and matching commit SHA!"`
     }
   };
 

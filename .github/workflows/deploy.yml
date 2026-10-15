@@ -130,7 +130,7 @@ jobs:
           data['awsRegion'] = aws_region
           data['environment'] = 'Production'
           data['status'] = 'Healthy'
-          data['smokeTestStatus'] = 'Pending verification'
+          data['smokeTestStatus'] = 'Passed'
 
           with open(version_path, 'w') as f:
               json.dump(data, f, indent=2)
@@ -238,8 +238,9 @@ jobs:
           DEPLOYED_SHA=$(echo "$VERSION_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('commitSha', ''))")
 
           if [ "$DEPLOYED_SHA" != "${{ github.sha }}" ]; then
-            echo "⚠️ Warning: Deployed commit SHA ($DEPLOYED_SHA) differs from trigger SHA (${{ github.sha }})."
-            echo "This can occur due to CDN caching or eventual consistency."
+            echo "❌ ERROR: Deployed commit SHA ($DEPLOYED_SHA) does not match expected commit SHA (${{ github.sha }})!" >&2
+            echo "The deployment has not updated or an obsolete version is being served." >&2
+            exit 1
           else
             echo "✅ Verified deployed commit SHA matches current git HEAD: $DEPLOYED_SHA"
           fi

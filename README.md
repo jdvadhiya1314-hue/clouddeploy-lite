@@ -162,10 +162,8 @@ Create an IAM Role that GitHub Actions assumes during workflow execution.
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:YOUR_GITHUB_ORG_OR_USER/YOUR_REPO_NAME:*"
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:YOUR_GITHUB_ORG_OR_USER/YOUR_REPO_NAME:ref:refs/heads/main"
         }
       }
     }
@@ -309,7 +307,7 @@ Open [http://localhost:8080](http://localhost:8080) in your web browser.
 
 | Issue / Error | Potential Cause | Resolution |
 |---|---|---|
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | OIDC Trust Policy repository or audience mismatch | Ensure the `sub` claim in your IAM Role Trust Policy exactly matches `repo:YOUR_ORG/YOUR_REPO:*` and that `aud` is set to `sts.amazonaws.com`. |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | OIDC Trust Policy repository or audience mismatch | Ensure the `sub` claim in your IAM Role Trust Policy exactly matches `repo:YOUR_ORG/YOUR_REPO:ref:refs/heads/main` and that `aud` is set to `sts.amazonaws.com`. |
 | `HTTP 403 Forbidden` on S3 Website URL | Public access is blocked or Bucket Policy is missing | In the S3 bucket's **Permissions** tab, verify **Block Public Access** is unchecked and the bucket policy grants `s3:GetObject` to `Principal: "*"`. |
 | `HTTP 404 Not Found` on S3 Website URL | Static Website Hosting is disabled | Go to S3 Bucket ➔ **Properties** ➔ **Static website hosting** and confirm it is **Enabled** with `index.html` as the index document. |
 | `Required file missing: site/...` | Incomplete codebase bundle | Ensure `site/index.html`, `site/styles.css`, `site/app.js`, and `site/version.json` are committed to the `main` branch. |
@@ -326,7 +324,7 @@ Before triggering your very first workflow run, make sure you have completed the
 - [ ] S3 Static Website Hosting enabled with `index.html`.
 - [ ] S3 Bucket Policy added granting public `s3:GetObject` permissions.
 - [ ] IAM OIDC Identity Provider created for `token.actions.githubusercontent.com`.
-- [ ] IAM Role created with Trust Policy scoped to your GitHub repo.
+- [ ] IAM Role created with Trust Policy scoped strictly to your GitHub repo and main branch (`repo:YOUR_ORG/YOUR_REPO:ref:refs/heads/main`).
 - [ ] IAM Permissions Policy attached allowing `s3:ListBucket`, `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject`.
 - [ ] GitHub Repository Variables configured (`AWS_REGION`, `AWS_S3_BUCKET`, `AWS_ROLE_ARN`).
 
