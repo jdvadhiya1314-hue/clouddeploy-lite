@@ -65,7 +65,7 @@ jobs:
           MISSING_VARS=0
           
           if [ -z "${{ vars.AWS_REGION }}" ]; then
-            echo "❌ Missing repository variable: AWS_REGION (e.g. us-east-1)" >&2
+            echo "❌ Missing repository variable: AWS_REGION (e.g. ap-south-1)" >&2
             MISSING_VARS=1
           else
             echo "✅ AWS_REGION: ${{ vars.AWS_REGION }}"
@@ -119,18 +119,18 @@ jobs:
           commit_sha = os.environ.get('COMMIT_SHA', '')
           run_num = os.environ.get('RUN_NUMBER', '1')
           deploy_time = os.environ.get('DEPLOY_TIME', '')
-          aws_region = os.environ.get('AWS_REGION', 'us-east-1')
+          aws_region = os.environ.get('AWS_REGION', 'ap-south-1')
           branch = os.environ.get('BRANCH', 'main')
 
           data['commitSha'] = commit_sha
-          data['shortSha'] = commit_sha[:7] if commit_sha else 'local'
+          data['shortSha'] = commit_sha[:7] if commit_sha else '—'
           data['branch'] = branch
           data['deployedAt'] = deploy_time
           data['deployedBy'] = f'GitHub Actions (run #{run_num})'
           data['awsRegion'] = aws_region
           data['environment'] = 'Production'
-          data['status'] = 'Healthy'
-          data['smokeTestStatus'] = 'Passed'
+          data['status'] = 'Deployed & Healthy'
+          data['smokeTestStatus'] = 'Pending post-deployment smoke test'
 
           with open(version_path, 'w') as f:
               json.dump(data, f, indent=2)
@@ -244,6 +244,22 @@ jobs:
           else
             echo "✅ Verified deployed commit SHA matches current git HEAD: $DEPLOYED_SHA"
           fi
+
+          # Only after smoke test has verified HTTP 200 and commit SHA match, stamp smokeTestStatus as Passed
+          echo "Stamping smokeTestStatus as 'Passed' following successful verification..."
+          python3 -c "
+          import json
+          with open('site/version.json', 'r') as f:
+              data = json.load(f)
+          data['smokeTestStatus'] = 'Passed'
+          with open('site/version.json', 'w') as f:
+              json.dump(data, f, indent=2)
+          "
+
+          aws s3 cp site/version.json "s3://${{ vars.AWS_S3_BUCKET }}/version.json" \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+          echo "✅ Final verified metadata published to S3."
 
           echo "=================================================="
           echo "🎉 CloudDeploy Lite Deployment & Smoke Test PASSED!"

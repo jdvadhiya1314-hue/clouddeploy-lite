@@ -1,15 +1,15 @@
 {
   "projectName": "CloudDeploy Lite",
   "version": "1.0.0",
-  "environment": "Production",
-  "status": "Healthy",
-  "commitSha": "789abc1234567890",
-  "shortSha": "789abc1",
+  "environment": "Preview",
+  "status": "Manual preview — awaiting automated deployment",
+  "commitSha": "uncommitted-local-preview",
+  "shortSha": "—",
   "branch": "main",
-  "deployedAt": "2026-10-15T09:40:00Z",
-  "deployedBy": "GitHub Actions (run #101)",
-  "awsRegion": "us-east-1",
+  "deployedAt": null,
+  "deployedBy": "Awaiting CI/CD deployment",
+  "awsRegion": "ap-south-1",
   "hostingProvider": "AWS S3 Static Web Hosting",
-  "smokeTestStatus": "Pending verification",
+  "smokeTestStatus": "Not verified by CI",
   "pipelineVersion": "v1.0"
 }

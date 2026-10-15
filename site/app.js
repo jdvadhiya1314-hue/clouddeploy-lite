@@ -183,9 +183,9 @@ with open('site/version.json', 'r+') as f:
 
   // Format relative time (e.g., "5 minutes ago")
   function formatRelativeTime(dateString) {
-    if (!dateString) return 'Just now';
+    if (!dateString) return 'Not yet deployed';
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString;
+    if (isNaN(date.getTime())) return 'Not yet deployed';
 
     const diffMs = Date.now() - date.getTime();
     const diffSec = Math.floor(diffMs / 1000);
@@ -218,19 +218,39 @@ with open('site/version.json', 'r+') as f:
 
   // Render metadata to UI elements
   function renderMetadata(data) {
-    if (elements.metricStatusVal) elements.metricStatusVal.textContent = data.status || 'Live & Synced';
+    if (elements.metricStatusVal) elements.metricStatusVal.textContent = data.status || 'Manual preview — awaiting automated deployment';
     if (elements.metricVersionTag) elements.metricVersionTag.textContent = data.version ? `v${data.version}` : 'v1.0.0';
-    if (elements.metricShortSha) elements.metricShortSha.textContent = data.shortSha || (data.commitSha ? data.commitSha.slice(0, 7) : 'e6a10f8');
+    if (elements.metricShortSha) {
+      const isLocal = !data.commitSha || data.commitSha === 'uncommitted-local-preview';
+      elements.metricShortSha.textContent = isLocal ? (data.shortSha || '—') : data.shortSha || data.commitSha.slice(0, 7);
+    }
     if (elements.metricBranch) elements.metricBranch.textContent = data.branch || 'main';
     if (elements.metricProvider) elements.metricProvider.textContent = data.hostingProvider || 'AWS S3';
-    if (elements.metricRegion) elements.metricRegion.textContent = data.awsRegion || 'us-east-1';
-    if (elements.metricEnvBadge) elements.metricEnvBadge.textContent = data.environment || 'Production';
-    if (elements.metricDeployedBy) elements.metricDeployedBy.textContent = data.deployedBy || 'GitHub Actions (OIDC)';
-    if (elements.smokeStatusText) elements.smokeStatusText.textContent = `${data.smokeTestStatus || 'Passed'} (200 OK)`;
+    if (elements.metricRegion) elements.metricRegion.textContent = data.awsRegion || 'ap-south-1';
+    if (elements.metricEnvBadge) elements.metricEnvBadge.textContent = data.environment || 'Preview';
+    if (elements.metricDeployedBy) elements.metricDeployedBy.textContent = data.deployedBy || 'Awaiting CI/CD deployment';
+
+    if (elements.metricStatusBadge) {
+      if (data.status && (data.status.toLowerCase().includes('preview') || data.status.toLowerCase().includes('awaiting'))) {
+        elements.metricStatusBadge.textContent = 'PREVIEW';
+        elements.metricStatusBadge.className = 'badge badge-purple';
+      } else {
+        elements.metricStatusBadge.textContent = 'HEALTHY';
+        elements.metricStatusBadge.className = 'badge badge-success';
+      }
+    }
+
+    if (elements.smokeStatusText) {
+      if (data.smokeTestStatus === 'Passed') {
+        elements.smokeStatusText.textContent = 'Passed (200 OK)';
+      } else {
+        elements.smokeStatusText.textContent = data.smokeTestStatus || 'Not verified by CI';
+      }
+    }
 
     if (elements.metricTimeAgo) {
       elements.metricTimeAgo.textContent = formatRelativeTime(data.deployedAt);
-      elements.metricTimeAgo.title = data.deployedAt ? new Date(data.deployedAt).toLocaleString() : '';
+      elements.metricTimeAgo.title = data.deployedAt ? new Date(data.deployedAt).toLocaleString() : 'Awaiting automated deployment';
     }
 
     if (elements.jsonMetadataDisplay) {
@@ -316,13 +336,20 @@ with open('site/version.json', 'r+') as f:
 
         if (missing.length === 0) {
           appendTerminalLine(`> Payload schema validation: PASS (Verified keys: ${requiredKeys.join(', ')})`, 'term-success');
-          appendTerminalLine(`> Active Git Commit SHA: ${payload.commitSha || 'unknown'}`, 'term-info');
-          appendTerminalLine(`> Post-Deploy Health Check: ALL SYSTEMS OPERATIONAL (200 OK)`, 'term-success');
+          const isLocal = !payload.commitSha || payload.commitSha === 'uncommitted-local-preview';
+          appendTerminalLine(`> Git Commit SHA: ${isLocal ? 'Awaiting automated deployment' : payload.commitSha}`, 'term-info');
+          
+          if (payload.smokeTestStatus === 'Passed') {
+            appendTerminalLine(`> CI Smoke Verification: Passed (Verified by automated pipeline)`, 'term-success');
+          } else {
+            appendTerminalLine(`> CI Smoke Status: ${payload.smokeTestStatus || 'Not verified by CI'}`, 'term-warn');
+          }
+          appendTerminalLine(`> HTTP Status: 200 OK (Round-trip: ${latency} ms)`, 'term-success');
 
           if (elements.probeStatLatency) elements.probeStatLatency.textContent = `${latency} ms`;
           if (elements.probeStatHttp) elements.probeStatHttp.textContent = `${response.status} OK`;
-          if (elements.probeStatPayload) elements.probeStatPayload.textContent = 'Valid (100%)';
-          showToast(`Smoke test passed (${latency}ms) — 200 OK`, 'success');
+          if (elements.probeStatPayload) elements.probeStatPayload.textContent = payload.smokeTestStatus || 'Valid JSON';
+          showToast(`Probe response 200 OK — ${payload.smokeTestStatus || 'Not verified by CI'}`, 'info');
         } else {
           appendTerminalLine(`> Warning: Missing metadata keys: ${missing.join(', ')}`, 'term-warn');
           if (elements.probeStatPayload) elements.probeStatPayload.textContent = 'Incomplete';
@@ -410,8 +437,12 @@ with open('site/version.json', 'r+') as f:
     // Copy full Git commit SHA
     if (elements.btnCopySha) {
       elements.btnCopySha.addEventListener('click', () => {
-        const sha = currentMetadata ? currentMetadata.commitSha : 'e6a10f82b7c419c8d3568c07e21a22be1b4f2c90';
-        copyToClipboard(sha, `Commit SHA copied: ${sha.slice(0, 10)}...`);
+        const sha = currentMetadata ? currentMetadata.commitSha : null;
+        if (!sha || sha === 'uncommitted-local-preview') {
+          showToast('No deployment commit SHA available yet (manual preview)', 'info');
+        } else {
+          copyToClipboard(sha, `Commit SHA copied: ${sha.slice(0, 10)}...`);
+        }
       });
     }
 

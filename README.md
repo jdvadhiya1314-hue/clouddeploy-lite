@@ -74,7 +74,7 @@ Follow these manual steps in your AWS Console before running the GitHub Actions 
 1. Open the **Amazon S3 Console** at [https://console.aws.amazon.com/s3/](https://console.aws.amazon.com/s3/).
 2. Click **Create bucket**.
 3. **Bucket name:** Choose a globally unique name (e.g., `clouddeploy-lite-yourname-prod`).
-4. **AWS Region:** Select your preferred region (e.g., `us-east-1`).
+4. **AWS Region:** Select your preferred region (e.g., `ap-south-1` for Asia Pacific Mumbai).
 5. **Object Ownership:** Keep **ACLs disabled (recommended)**.
 6. **Block Public Access settings for this bucket:**
    - Uncheck **Block *all* public access**.
@@ -91,7 +91,7 @@ Follow these manual steps in your AWS Console before running the GitHub Actions 
 6. Under **Index document**, enter: `index.html`.
 7. Under **Error document**, enter: `index.html`.
 8. Click **Save changes**.
-9. Note the **Bucket website endpoint** URL displayed at the bottom of the card (e.g., `http://clouddeploy-lite-yourname-prod.s3-website-us-east-1.amazonaws.com`).
+9. Note the **Bucket website endpoint** URL displayed at the bottom of the card (e.g., `http://clouddeploy-lite-yourname-prod.s3-website.ap-south-1.amazonaws.com`).
 
 #### Configure S3 Public Read Bucket Policy
 1. Select the **Permissions** tab of your bucket.
@@ -223,10 +223,10 @@ Configure your repository variables in GitHub. **Do not store these as secrets**
 
 | Variable Name | Required | Example Value | Description |
 |---|---|---|---|
-| `AWS_REGION` | **Yes** | `us-east-1` | Target AWS Region where your S3 bucket resides |
+| `AWS_REGION` | **Yes** | `ap-south-1` | Target AWS Region where your S3 bucket resides (e.g. AWS Mumbai) |
 | `AWS_S3_BUCKET` | **Yes** | `clouddeploy-lite-yourname-prod` | Name of the target S3 bucket |
 | `AWS_ROLE_ARN` | **Yes** | `arn:aws:iam::123456789012:role/GitHubActions-CloudDeployLite-Role` | Full ARN of the IAM OIDC Role |
-| `WEBSITE_URL` | Optional | `http://clouddeploy-lite-yourname-prod.s3-website-us-east-1.amazonaws.com` | Override for custom domain or S3 endpoint |
+| `WEBSITE_URL` | Optional | `http://clouddeploy-lite-yourname-prod.s3-website.ap-south-1.amazonaws.com` | Override for custom domain or S3 endpoint |
 
 ---
 
@@ -266,8 +266,9 @@ The workflow defined in [`.github/workflows/deploy.yml`](file:///.github/workflo
     └── Verifies AWS_REGION, AWS_S3_BUCKET, and AWS_ROLE_ARN are set.
 
 [4] Generate Deployment Metadata
-    └── Dynamically stamps site/version.json with commit SHA, short SHA,
-        UTC timestamp, build run number, and target AWS region.
+    └── Dynamically stamps site/version.json with actual commit SHA, short SHA,
+        UTC timestamp, build run number, and target AWS region (ap-south-1).
+        Sets smokeTestStatus to "Pending post-deployment smoke test".
 
 [5] Authenticate via AWS OIDC
     └── Exchanges GitHub Actions OIDC token for temporary AWS STS credentials
@@ -277,10 +278,12 @@ The workflow defined in [`.github/workflows/deploy.yml`](file:///.github/workflo
     └── Synchronizes the site/ directory using:
         aws s3 sync site/ "s3://${{ vars.AWS_S3_BUCKET }}" --delete --no-progress
 
-[7] HTTP Smoke Test
+[7] HTTP Smoke Test & Final Metadata Verification
     └── Probes the live website endpoint using curl.
     └── Validates HTTP 200 OK and asserts that version.json contains
         the current Git commit SHA.
+    └── Only upon successful verification, updates smokeTestStatus to "Passed"
+        and syncs the verified version.json to S3.
 ```
 
 ---
@@ -311,7 +314,7 @@ Open [http://localhost:8080](http://localhost:8080) in your web browser.
 | `HTTP 403 Forbidden` on S3 Website URL | Public access is blocked or Bucket Policy is missing | In the S3 bucket's **Permissions** tab, verify **Block Public Access** is unchecked and the bucket policy grants `s3:GetObject` to `Principal: "*"`. |
 | `HTTP 404 Not Found` on S3 Website URL | Static Website Hosting is disabled | Go to S3 Bucket ➔ **Properties** ➔ **Static website hosting** and confirm it is **Enabled** with `index.html` as the index document. |
 | `Required file missing: site/...` | Incomplete codebase bundle | Ensure `site/index.html`, `site/styles.css`, `site/app.js`, and `site/version.json` are committed to the `main` branch. |
-| Smoke Test times out or fails with connection error | Regional endpoint mismatch | S3 static website hosting URLs vary by region. If using `us-east-1`, set `WEBSITE_URL` in your GitHub repository variables to the exact endpoint shown in the S3 console. |
+| Smoke Test times out or fails with connection error | Regional endpoint mismatch | S3 static website hosting URLs vary by region. If using `ap-south-1`, set `WEBSITE_URL` in your GitHub repository variables to the exact endpoint shown in the S3 console (e.g. `http://<bucket>.s3-website.ap-south-1.amazonaws.com`). |
 
 ---
 

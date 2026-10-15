@@ -33,7 +33,7 @@
       <div class="nav-status">
         <div class="status-pill healthy" id="nav-status-pill">
           <span class="status-dot pulse"></span>
-          <span class="status-text" id="nav-status-text">Production &bull; AWS S3</span>
+          <span class="status-text" id="nav-status-text">Manual Preview &bull; AWS S3</span>
         </div>
       </div>
 
@@ -82,18 +82,20 @@
         <div class="metric-card card-health">
           <div class="card-header">
             <span class="card-label">Deployment Status</span>
-            <span class="badge badge-success" id="metric-status-badge">HEALTHY</span>
+            <span class="badge badge-purple" id="metric-status-badge">PREVIEW</span>
           </div>
           <div class="card-body">
             <div class="metric-value status-indicator-container">
               <span class="indicator-glow"></span>
-              <span id="metric-status-val">Live &amp; Synced</span>
+              <span id="metric-status-val">Manual preview &mdash; awaiting automated deployment</span>
             </div>
             <div class="metric-subtext">
-              <svg class="mini-icon text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20 6 9 17 4 12"/>
+              <svg class="mini-icon text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
-              <span>Automated smoke tests: <strong id="smoke-status-text">Passed (200 OK)</strong></span>
+              <span>Automated smoke tests: <strong id="smoke-status-text">Not verified by CI</strong></span>
             </div>
           </div>
         </div>
@@ -113,7 +115,7 @@
                   <line x1="1.05" y1="12" x2="7" y2="12"/>
                   <line x1="17.01" y1="12" x2="22.96" y2="12"/>
                 </svg>
-                <code id="metric-short-sha">e6a10f8</code>
+                <code id="metric-short-sha">&mdash;</code>
                 <svg class="mini-icon copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                   <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -136,7 +138,7 @@
         <div class="metric-card card-environment">
           <div class="card-header">
             <span class="card-label">Target Infrastructure</span>
-            <span class="badge badge-purple" id="metric-env-badge">Production</span>
+            <span class="badge badge-purple" id="metric-env-badge">Preview</span>
           </div>
           <div class="card-body">
             <div class="metric-value font-mono" id="metric-provider">AWS S3</div>
@@ -146,7 +148,7 @@
                 <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
                 <path d="M2 12h20"/>
               </svg>
-              <span>Region: <strong id="metric-region">us-east-1</strong> &bull; Static Web Hosting</span>
+              <span>Region: <strong id="metric-region">ap-south-1</strong> &bull; Static Web Hosting</span>
             </div>
           </div>
         </div>
@@ -158,12 +160,12 @@
             <span class="badge badge-cyan">Zero Secret OIDC</span>
           </div>
           <div class="card-body">
-            <div class="metric-value font-mono-sm" id="metric-time-ago">Recently</div>
+            <div class="metric-value font-mono-sm" id="metric-time-ago">Not yet deployed</div>
             <div class="metric-subtext">
               <svg class="mini-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
               </svg>
-              <span id="metric-deployed-by">GitHub Actions OIDC</span>
+              <span id="metric-deployed-by">Awaiting CI/CD pipeline</span>
             </div>
           </div>
         </div>
