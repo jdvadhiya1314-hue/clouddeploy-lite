@@ -129,7 +129,7 @@ jobs:
           data['deployedBy'] = f'GitHub Actions (run #{run_num})'
           data['awsRegion'] = aws_region
           data['environment'] = 'Production'
-          data['status'] = 'Deployed & Healthy'
+          data['status'] = 'Deployment in progress — awaiting verification'
           data['smokeTestStatus'] = 'Pending post-deployment smoke test'
 
           with open(version_path, 'w') as f:
@@ -245,12 +245,13 @@ jobs:
             echo "✅ Verified deployed commit SHA matches current git HEAD: $DEPLOYED_SHA"
           fi
 
-          # Only after smoke test has verified HTTP 200 and commit SHA match, stamp smokeTestStatus as Passed
-          echo "Stamping smokeTestStatus as 'Passed' following successful verification..."
+          # Only after smoke test has verified HTTP 200 and commit SHA match, finalize metadata
+          echo "Finalizing verified deployment metadata..."
           python3 -c "
           import json
           with open('site/version.json', 'r') as f:
               data = json.load(f)
+          data['status'] = 'Deployed & Healthy'
           data['smokeTestStatus'] = 'Passed'
           with open('site/version.json', 'w') as f:
               json.dump(data, f, indent=2)
