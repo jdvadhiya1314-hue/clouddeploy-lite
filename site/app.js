@@ -119,6 +119,7 @@ with open('site/version.json', 'r+') as f:
 
   // DOM Elements
   const elements = {
+    navStatusText: document.getElementById('nav-status-text'),
     metricStatusBadge: document.getElementById('metric-status-badge'),
     metricStatusVal: document.getElementById('metric-status-val'),
     smokeStatusText: document.getElementById('smoke-status-text'),
@@ -210,6 +211,9 @@ with open('site/version.json', 'r+') as f:
       renderMetadata(data);
     } catch (err) {
       console.warn('Could not load version.json:', err);
+      if (elements.navStatusText) {
+        elements.navStatusText.innerHTML = 'Manual Preview &bull; AWS S3';
+      }
       if (elements.jsonMetadataDisplay) {
         elements.jsonMetadataDisplay.textContent = '// Unable to fetch version.json. Running in static preview mode.';
       }
@@ -218,6 +222,15 @@ with open('site/version.json', 'r+') as f:
 
   // Render metadata to UI elements
   function renderMetadata(data) {
+    // Top Navbar Status Badge
+    if (elements.navStatusText) {
+      if (data && data.status === 'Deployed & Healthy') {
+        elements.navStatusText.innerHTML = 'Production &bull; AWS S3';
+      } else {
+        elements.navStatusText.innerHTML = 'Manual Preview &bull; AWS S3';
+      }
+    }
+
     if (elements.metricStatusVal) elements.metricStatusVal.textContent = data.status || 'Manual preview — awaiting automated deployment';
     if (elements.metricVersionTag) elements.metricVersionTag.textContent = data.version ? `v${data.version}` : 'v1.0.0';
     if (elements.metricShortSha) {
