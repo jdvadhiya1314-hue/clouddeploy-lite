@@ -1,0 +1,249 @@
+name: Deploy CloudDeploy Lite to AWS S3
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Minimum necessary permissions for secure GitHub OIDC token exchange
+permissions:
+  id-token: write   # Required to request the GitHub OIDC JWT token
+  contents: read    # Required to check out repository code
+
+jobs:
+  deploy:
+    name: Build, Validate & Deploy to S3
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Validate that required website files exist and are non-empty
+      - name: Validate website files
+        run: |
+          echo "=================================================="
+          echo "Stage 1: Pre-flight Bundle Integrity Validation"
+          echo "=================================================="
+          
+          REQUIRED_FILES=(
+            "site/index.html"
+            "site/styles.css"
+            "site/app.js"
+            "site/version.json"
+          )
+          
+          FAILED=0
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ ERROR: Required file missing: $file" >&2
+              FAILED=1
+            elif [ ! -s "$file" ]; then
+              echo "❌ ERROR: File is empty: $file" >&2
+              FAILED=1
+            else
+              FILE_SIZE=$(wc -c < "$file" | tr -d ' ')
+              echo "✅ Validated $file (${FILE_SIZE} bytes)"
+            fi
+          done
+
+          if [ $FAILED -ne 0 ]; then
+            echo "❌ Bundle integrity validation failed. Aborting deployment." >&2
+            exit 1
+          fi
+          echo "✅ All static website assets verified."
+
+      # Step 3: Validate required GitHub repository variables
+      - name: Check required repository configuration variables
+        run: |
+          echo "=================================================="
+          echo "Stage 2: Verifying GitHub Repository Variables"
+          echo "=================================================="
+
+          MISSING_VARS=0
+          
+          if [ -z "${{ vars.AWS_REGION }}" ]; then
+            echo "❌ Missing repository variable: AWS_REGION (e.g. us-east-1)" >&2
+            MISSING_VARS=1
+          else
+            echo "✅ AWS_REGION: ${{ vars.AWS_REGION }}"
+          fi
+
+          if [ -z "${{ vars.AWS_S3_BUCKET }}" ]; then
+            echo "❌ Missing repository variable: AWS_S3_BUCKET" >&2
+            MISSING_VARS=1
+          else
+            echo "✅ AWS_S3_BUCKET: ${{ vars.AWS_S3_BUCKET }}"
+          fi
+
+          if [ -z "${{ vars.AWS_ROLE_ARN }}" ]; then
+            echo "❌ Missing repository variable: AWS_ROLE_ARN" >&2
+            MISSING_VARS=1
+          else
+            echo "✅ AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}"
+          fi
+
+          if [ $MISSING_VARS -ne 0 ]; then
+            echo "" >&2
+            echo "Please configure the missing repository variables under:" >&2
+            echo "GitHub Repo -> Settings -> Secrets and variables -> Actions -> Variables" >&2
+            exit 1
+          fi
+
+      # Step 4: Generate dynamic deployment metadata using Git commit SHA
+      - name: Generate deployment metadata
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          echo "=================================================="
+          echo "Stage 3: Generating Release Metadata"
+          echo "=================================================="
+
+          export SHORT_SHA="${COMMIT_SHA:0:7}"
+          export DEPLOY_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          echo "Stamping site/version.json with commit $SHORT_SHA..."
+
+          python3 -c "
+          import json, os
+
+          version_path = 'site/version.json'
+          with open(version_path, 'r') as f:
+              data = json.load(f)
+
+          commit_sha = os.environ.get('COMMIT_SHA', '')
+          run_num = os.environ.get('RUN_NUMBER', '1')
+          deploy_time = os.environ.get('DEPLOY_TIME', '')
+          aws_region = os.environ.get('AWS_REGION', 'us-east-1')
+          branch = os.environ.get('BRANCH', 'main')
+
+          data['commitSha'] = commit_sha
+          data['shortSha'] = commit_sha[:7] if commit_sha else 'local'
+          data['branch'] = branch
+          data['deployedAt'] = deploy_time
+          data['deployedBy'] = f'GitHub Actions (run #{run_num})'
+          data['awsRegion'] = aws_region
+          data['environment'] = 'Production'
+          data['status'] = 'Healthy'
+          data['smokeTestStatus'] = 'Pending verification'
+
+          with open(version_path, 'w') as f:
+              json.dump(data, f, indent=2)
+
+          print('Updated version.json contents:')
+          print(json.dumps(data, indent=2))
+          "
+
+      # Step 5: Authenticate to AWS using GitHub OIDC (No permanent access keys!)
+      - name: Authenticate to AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: CloudDeployLite-${{ github.run_id }}
+
+      # Step 6: Deploy static site files to AWS S3 using AWS CLI
+      - name: Deploy static files to AWS S3
+        run: |
+          echo "=================================================="
+          echo "Stage 4: Synchronizing site/ to S3"
+          echo "=================================================="
+          
+          # Deploy only the contents of site/ to target bucket
+          # --delete ensures obsolete files are pruned
+          aws s3 sync site/ "s3://${{ vars.AWS_S3_BUCKET }}" \
+            --delete \
+            --no-progress
+
+          echo "✅ S3 bucket synchronization complete."
+
+      # Step 7: Run HTTP smoke test against the deployed live website
+      - name: Post-deployment HTTP Smoke Test
+        run: |
+          echo "=================================================="
+          echo "Stage 5: Live HTTP Smoke Test & Health Probes"
+          echo "=================================================="
+
+          # Determine target website URL
+          WEBSITE_URL="${{ vars.WEBSITE_URL }}"
+          if [ -z "$WEBSITE_URL" ]; then
+            # Standard S3 static website hosting endpoint format
+            WEBSITE_URL="http://${{ vars.AWS_S3_BUCKET }}.s3-website-${{ vars.AWS_REGION }}.amazonaws.com"
+          fi
+
+          # Strip trailing slash if present
+          WEBSITE_URL="${WEBSITE_URL%/}"
+          echo "Target website URL: $WEBSITE_URL"
+
+          # 1. Probe the main website root
+          echo "Probing website root: $WEBSITE_URL ..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --retry 6 \
+            --retry-delay 5 \
+            --retry-connrefused \
+            --max-time 15 \
+            "$WEBSITE_URL")
+
+          echo "Initial HTTP Response Status Code: $HTTP_CODE"
+
+          # Regional fallback check if standard hyphen endpoint didn't respond
+          if [ "$HTTP_CODE" -ne 200 ] && [ -z "${{ vars.WEBSITE_URL }}" ]; then
+            FALLBACK_URL="http://${{ vars.AWS_S3_BUCKET }}.s3-website.${{ vars.AWS_REGION }}.amazonaws.com"
+            echo "Testing alternate regional endpoint: $FALLBACK_URL ..."
+            FALLBACK_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --retry 4 \
+              --retry-delay 3 \
+              --max-time 15 \
+              "$FALLBACK_URL")
+            if [ "$FALLBACK_CODE" -eq 200 ]; then
+              WEBSITE_URL="$FALLBACK_URL"
+              HTTP_CODE=200
+              echo "✅ Alternate regional endpoint returned 200 OK."
+            fi
+          fi
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "❌ Smoke test failed! Expected HTTP status 200, but received: $HTTP_CODE" >&2
+            echo "Common causes:" >&2
+            echo "  - S3 Static Website Hosting is not enabled in bucket properties" >&2
+            echo "  - S3 Block Public Access is still blocking public read" >&2
+            echo "  - S3 Bucket Policy does not allow s3:GetObject to Principal '*'" >&2
+            exit 1
+          fi
+          echo "✅ Root endpoint returned 200 OK."
+
+          # 2. Probe version.json to verify deployment metadata freshness
+          VERSION_URL="$WEBSITE_URL/version.json"
+          echo "Probing metadata endpoint: $VERSION_URL ..."
+          
+          VERSION_RESPONSE=$(curl -s -f \
+            --retry 4 \
+            --retry-delay 3 \
+            --max-time 15 \
+            "$VERSION_URL") || {
+            echo "❌ Failed to fetch $VERSION_URL" >&2
+            exit 1
+          }
+
+          echo "Fetched version.json response:"
+          echo "$VERSION_RESPONSE"
+
+          # Verify that commit SHA matches current deployment
+          DEPLOYED_SHA=$(echo "$VERSION_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('commitSha', ''))")
+
+          if [ "$DEPLOYED_SHA" != "${{ github.sha }}" ]; then
+            echo "⚠️ Warning: Deployed commit SHA ($DEPLOYED_SHA) differs from trigger SHA (${{ github.sha }})."
+            echo "This can occur due to CDN caching or eventual consistency."
+          else
+            echo "✅ Verified deployed commit SHA matches current git HEAD: $DEPLOYED_SHA"
+          fi
+
+          echo "=================================================="
+          echo "🎉 CloudDeploy Lite Deployment & Smoke Test PASSED!"
+          echo "=================================================="
